@@ -1,0 +1,493 @@
+﻿@using System.Data.SqlClient;
+@using System.Configuration;
+@{
+    Page.Title = "Title goes here";
+    Layout = "~/Shared/_BasicLayout.cshtml";
+    bool postForm = false;
+    bool replyForm = false;
+    List<Post> selectedPosts = new List<Post>();
+    List<User> selectedUsers = new List<User>();
+    User creator = new User();
+    var title = "";
+    var userId = "";
+    var size = "";
+    var date = "";
+    var content = "";
+    var image = "";
+    var threadId = "";
+    <!--Checks for an Id value in the query string-->
+    if (!Request.QueryString["Id"].IsEmpty() && Request.QueryString["Id"].IsInt())
+    {
+        threadId = Request.QueryString["Id"];
+        string cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+        using (SqlConnection con = new SqlConnection(cstr))
+        {
+            con.Open();
+            <!--Finds the thread in the database that matches the query string Id, and loads it's content into separate variables-->
+            string query = string.Format("SELECT * FROM tblThread WHERE threadId = '{0}'", threadId);
+            using (SqlCommand cmd = new SqlCommand(query, con))
+            {
+                SqlDataReader result = cmd.ExecuteReader();
+
+
+                if (result.HasRows)
+                {
+                    result.Read();
+                    title = result["threadTitle"].ToString();
+                    userId = result["userId"].ToString();
+                    size = result["threadSize"].ToString();
+                    date = result["threadDate"].ToString();
+                    content = result["threadContent"].ToString();
+                    image = result["threadImage"].ToString();
+
+
+                }
+                else
+                {
+                    <!--Displays error if validation fails-->
+                    Validation.AddFormError("No thread was found for that ID.");
+                }
+            }
+            creator.Id = Convert.ToInt32(userId);
+            //Gets the info for the creator of the thread and stores it into a User object
+            query = string.Format("SELECT * FROM tblUser WHERE userId = '{0}'", userId);
+            using (SqlCommand cmd = new SqlCommand(query, con))
+            {
+                SqlDataReader result = cmd.ExecuteReader();
+
+
+                if (result.HasRows)
+                {
+                    result.Read();
+                    creator.Username = result["username"].ToString();
+                    creator.Email = result["email"].ToString();
+                    creator.PostCount = Convert.ToInt32(result["postCount"]);
+                    creator.Description = result["description"].ToString();
+                    creator.ProfileImage = result["profileImage"].ToString();
+                    creator.JoinDate = Convert.ToDateTime(result["joinDate"]);
+
+
+                }
+                else
+                {
+                    <!--Displays error if validation fails-->
+                    Validation.AddFormError("No user was found for that ID.");
+                }
+            }
+
+            <!--Gets all posts from database that are linked to the current thread, and loads them into a list-->
+            query = string.Format("SELECT * FROM tblPost WHERE threadId = '{0}'", threadId);
+            using (SqlCommand cmd = new SqlCommand(query, con))
+            {
+
+                using (SqlDataReader rdr = cmd.ExecuteReader())
+                {
+                    if (rdr.HasRows)
+                    {
+                        while (rdr.Read())
+                        {
+                            var tempImageFile = "";
+                            var tempRepliedPost = -1;
+                            if (!rdr.IsDBNull(5))
+                            {
+                                tempImageFile = rdr["imageFile"].ToString();
+                            }
+
+                            if (!rdr.IsDBNull(6))
+                            {
+                                tempRepliedPost = Convert.ToInt32(rdr["repliedPostId"]);
+                            }
+                            selectedPosts.Add(new Post
+                            {
+                                Id = Convert.ToInt32(rdr["postId"]),
+                                UserId = Convert.ToInt32(rdr["userId"]),
+                                ThreadId = Convert.ToInt32(rdr["threadId"]),
+                                Content = rdr["postContent"].ToString(),
+                                Date = Convert.ToDateTime(rdr["postDate"]),
+                                ImageFile = tempImageFile,
+                                RepliedPostId = tempRepliedPost
+
+                            });
+                        }
+                    }
+
+                    rdr.Close();
+                }
+            }
+            <!--Gets all users that own posts in the thread, and loads them to a list-->
+            query = string.Format("SELECT * FROM tblUser INNER JOIN tblPost ON tblUser.UserId = tblPost.UserId WHERE tblPost.threadId = {0}", threadId);
+            using (SqlCommand cmd = new SqlCommand(query, con))
+            {
+                using (SqlDataReader rdr = cmd.ExecuteReader())
+                {
+                    if (rdr.HasRows)
+                    {
+                        while (rdr.Read())
+                        {
+                            selectedUsers.Add(new User
+                            {
+                                Id = Convert.ToInt32(rdr["userId"]),
+                                Username = rdr["username"].ToString(),
+                                Email = rdr["email"].ToString(),
+                                PostCount = Convert.ToInt32(rdr["postCount"]),
+                                Description = rdr["description"].ToString(),
+                                ProfileImage = rdr["profileImage"].ToString(),
+                                JoinDate = Convert.ToDateTime(rdr["joinDate"])
+
+                            });
+                        }
+                    }
+
+                    rdr.Close();
+                }
+            }
+        }
+
+
+        if (Request.Form["createPostSubmit"] != null)
+        {
+            postForm = true;
+        }
+        if (Request.Form["cancelPost"] != null)
+        {
+            postForm = false;
+            Response.Redirect(Request.RawUrl);
+
+        }
+        <!--If user submits a normal post, validates it and saves it to the database-->
+        if (Request.Form["submitPost"] != null)
+        {
+            Validation.RequireField("postContent", "Post cannot be empty");
+
+            if (Validation.IsValid())
+            {
+                var postContent = Request.Form["postContent"];
+                var id = Convert.ToInt32(Session["id"]);
+
+                string savedFileName = null;
+                var file = Request.Files["postChooseFile"];
+
+                //check file was submitted
+                if (file != null && file.ContentLength > 0)
+                {
+                    string fileSeed = Guid.NewGuid().ToString("N");
+                    string fname = Path.GetFileName(file.FileName);
+                    string extension = Path.GetExtension(file.FileName);
+                    savedFileName = fileSeed + extension;
+
+                    file.SaveAs(Server.MapPath(Path.Combine("~/Images/PostImages/", savedFileName)));
+                }
+
+                cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+                using (SqlConnection con = new SqlConnection(cstr))
+                {
+                    con.Open();
+                    string query;
+                    //Two query strings for image or no image
+                    if (savedFileName != null)
+                    {
+
+                        query = string.Format("INSERT INTO tblPost (userId, threadId, postContent, postDate, imageFile) Values('{0}', '{1}', @content, '{2}', '{3}')", id, threadId, DateTime.Now, savedFileName);
+
+                    }
+                    else
+                    {
+                        query = string.Format("INSERT INTO tblPost (userId, threadId, postContent, postDate) Values('{0}', '{1}', @content, '{2}')", id, threadId, DateTime.Now);
+
+                    }
+
+
+
+                    using (SqlCommand cmd = new SqlCommand(query, con))
+                    {
+                        //Using a parameterized query to prevent SQL Injection from inputs
+                        var contentParam = new SqlParameter("content", System.Data.SqlDbType.Text);
+                        contentParam.Value = postContent;
+                        cmd.Parameters.Add(contentParam);
+
+                        var result = cmd.ExecuteScalar();
+                    }
+
+                    //Increment the user's postCount by 1 when they submit a post
+                    query = string.Format("UPDATE tblUser SET postCount = postCount + 1 WHERE userId = {0}", id);
+
+                    using (SqlCommand cmd2 = new SqlCommand(query, con))
+                    {
+                        var result2 = cmd2.ExecuteScalar();
+                    }
+                    //Increment the threads size by 1 when a post is submitted to it
+                    query = string.Format("UPDATE tblThread SET threadSize = threadSize + 1 WHERE threadId = {0}", threadId);
+
+                    using (SqlCommand cmd2 = new SqlCommand(query, con))
+                    {
+                        var result2 = cmd2.ExecuteScalar();
+                    }
+                    con.Close();
+                    Response.Redirect(Request.RawUrl);
+
+                }
+            }
+        }
+
+        if (Request.Form["reply"] != null)
+        {
+            replyForm = true;
+        }
+        if (Request.Form["cancelReply"] != null)
+        {
+            replyForm = false;
+            Response.Redirect(Request.RawUrl);
+        }
+        <!--If the user a reply to another specific post, does the same as the post submission but the ID of
+            the post the user is replying to-->
+        if (Request.Form["submitReply"] != null)
+        {
+            Validation.RequireField("replyContent", "Reply cannot be empty");
+
+            if (Validation.IsValid())
+            {
+                var replyContent = Request.Form["replyContent"];
+                var id = Convert.ToInt32(Session["id"]);
+                var replyPostId = Convert.ToInt32(Request.Form["replyPostId"]);
+
+                string savedFileName = null;
+                var file = Request.Files["replyChooseFile"];
+
+                //check file was submitted
+                if (file != null && file.ContentLength > 0)
+                {
+                    string fileSeed = Guid.NewGuid().ToString("N");
+                    string fname = Path.GetFileName(file.FileName);
+                    string extension = Path.GetExtension(file.FileName);
+                    savedFileName = fileSeed + extension;
+
+                    file.SaveAs(Server.MapPath(Path.Combine("~/Images/PostImages/", savedFileName)));
+                }
+
+                cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+                using (SqlConnection con = new SqlConnection(cstr))
+                {
+                    con.Open();
+                    string query;
+                    if (savedFileName != null)
+                    {
+
+                        query = string.Format("INSERT INTO tblPost (userId, threadId, postContent, postDate, imageFile, repliedPostId) Values('{0}', '{1}', @content, '{2}', '{3}', '{4}')", id, threadId, DateTime.Now, savedFileName, replyPostId);
+
+                    }
+                    else
+                    {
+                        query = string.Format("INSERT INTO tblPost (userId, threadId, postContent, postDate, repliedPostId) Values('{0}', '{1}', @content, '{2}', '{3}')", id, threadId, DateTime.Now, replyPostId);
+
+                    }
+
+
+
+                    using (SqlCommand cmd = new SqlCommand(query, con))
+                    {
+                        var contentParam = new SqlParameter("content", System.Data.SqlDbType.Text);
+                        contentParam.Value = replyContent;
+                        cmd.Parameters.Add(contentParam);
+
+                        var result = cmd.ExecuteScalar();
+                    }
+
+                    query = string.Format("UPDATE tblUser SET postCount = postCount + 1 WHERE userId = {0}", id);
+
+                    using (SqlCommand cmd2 = new SqlCommand(query, con))
+                    {
+                        var result2 = cmd2.ExecuteScalar();
+                    }
+
+                    query = string.Format("UPDATE tblThread SET threadSize = threadSize + 1 WHERE threadId = {0}", threadId);
+
+                    using (SqlCommand cmd2 = new SqlCommand(query, con))
+                    {
+                        var result2 = cmd2.ExecuteScalar();
+                    }
+                    con.Close();
+                    Response.Redirect(Request.RawUrl);
+
+                }
+            }
+        }
+    }
+}
+<div class="thread">
+    <!--Displays the "Main Post" of the thread, (info that the thread creator entered into their form)-->
+<div id="mainPost">
+    <table>
+        <tr>
+            <td>
+                <div class="creatorInfo">
+                    <div class="creatorContainer"><img class="userThumbnail" src="~/Images/ProfileImages/@creator.ProfileImage" /></div>
+
+                    <a id="creatorname" href="~/viewProfile?userId=@creator.Id">@creator.Username</a>
+                    <br />
+                    @if (creator.PostCount != 1)
+                    {
+                        <label>@creator.PostCount Posts</label>
+                    }
+                    else
+                    {
+                        <label>@creator.PostCount Post</label>
+                    }
+                    
+                </div>
+            </td>
+            <td>
+                <div class="mainContent">
+                    <h2>@title</h2>
+                    @if (image != "")
+                    {
+                        <img class="postImage" src="~/Images/ThreadImages/@image" />
+                    }
+
+                    <p>@content</p>
+                </div>
+            </td>
+        </tr>
+    </table>
+    <!--Displays errors for forms-->
+    <label>@Html.ValidationSummary()</label>
+    <!--If the user clicks the button to start creating a post, a post creation form appears-->
+    @if (postForm)
+    {
+        <form method="post" enctype="multipart/form-data">
+            <table>
+                <tr>
+                    <td>Post: </td>
+                    <td>
+                        <textarea rows="4" cols="50" name="postContent"></textarea>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        Image:
+                    </td>
+                    <td>
+                        <input type="file" accept="image/png, image/jpeg" name="postChooseFile" />
+                    </td>
+                </tr>
+            </table>
+
+            <button id="btnCancelPost" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="cancelPost">Cancel</button>
+            <button id="btnPostReply" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="submitPost">Post Reply</button>
+        </form>
+    }
+    else
+    {
+        <!--Displays a post creation button if a user is logged in-->
+        if (Session["loggedIn"] != null && Session["loggedIn"].Equals(true))
+        {
+            <form id="createPost" method="post" class="form-inline my-2 my-lg-0">
+                <button id="btnCreatePost" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="createPostSubmit">Create Post</button>
+            </form>
+        }
+
+    }
+</div>
+
+    <!--Table that uses a foreach to display all posts in the selectedPosts list-->
+<table class="tblPosts">
+    @foreach (Post post in selectedPosts)
+    {
+        var user = selectedUsers.Find(x => x.Id == post.UserId);
+
+        <tr style="height:1px;">
+            <td style="height:inherit;">
+                <div class="userInfo">
+                    <div class="userContainer"><img class="userThumbnail" src="~/Images/ProfileImages/@user.ProfileImage" /></div>
+                    
+                    <a id="username" href="~/viewProfile?userId=@post.UserId">@user.Username</a>
+                    <br />
+                    @if (@user.PostCount != 1)
+                    {
+                        <label>@user.PostCount Posts</label>
+                    }
+                    else
+                    {
+                        <label>@user.PostCount Post</label>
+                    }
+                    
+                </div>
+            </td>
+            <td style="height:inherit;">
+                <div class="content">
+
+
+                    <div class="postId">Post #@post.Id</div>
+                    @if (@post.RepliedPostId != -1)
+                {
+                    var gridRepliedPost = selectedPosts.Find(x => x.Id == Convert.ToInt32(post.RepliedPostId));
+                    var gridRepliedUser = selectedUsers.Find(x => x.Id == gridRepliedPost.UserId);
+                        <div style="position:absolute; top:0px;">Reply to <a href="~/viewProfile?userId=@gridRepliedUser.Id">@gridRepliedUser.Username</a> (Post #@gridRepliedPost.Id)</div>
+                    }
+                    <div class="contentPadding">
+                        <div class="postContent">
+                            @if (@post.ImageFile != "")
+                {
+                                <img class="postImage" src="~/Images/PostImages/@post.ImageFile" />
+                            }
+
+                            <p>@post.Content</p>
+                        </div>
+                    </div>
+                    <!--If a user is logged in, displays a reply button to display a form for replying to this specific post-->
+                    @if (Session["loggedIn"] != null && Session["loggedIn"].Equals(true))
+                {
+                        <div>
+
+                            <form method="post">
+                                <button class="btn btn-outline-success my-2 my-sm-0" type="submit" name="reply" value="@post.Id">Reply</button>
+                            </form>
+
+                        </div>
+                    }
+                </div>
+            </td>
+        </tr>
+    }
+</table>
+    </div>
+    <!--If a user clicks the reply button for a post, displays a separate reply form in front of the page content-->
+@if (replyForm)
+{
+
+    var replyId = Request.Form["reply"];
+    var replyPost = selectedPosts.Find(x => x.Id == Convert.ToInt32(replyId));
+    var replyUser = selectedUsers.Find(x => x.Id == replyPost.UserId);
+
+    <div id="reply" class="replyBlock">
+        <form method="post" enctype="multipart/form-data">
+            <table>
+                <tr>
+                    <td>
+                        Reply To:
+                    </td>
+                    <td>
+                        @replyUser.Username (Post #@replyPost.Id)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Post: </td>
+                    <td>
+                        <textarea rows="4" cols="50" name="replyContent"></textarea>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        Image:
+                    </td>
+                    <td>
+                        <input type="file" accept="image/png, image/jpeg" name="replyChooseFile" />
+                        <input type="hidden" value="@replyPost.Id" name="replyPostId" />
+                    </td>
+                </tr>
+            </table>
+
+            <button id="btnCancelReply" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="cancelReply">Cancel</button>
+            <button id="btnPostReply" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="submitReply">Post Reply</button>
+        </form>
+    </div>
+}

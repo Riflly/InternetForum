@@ -1,0 +1,118 @@
+﻿@using System.Data.SqlClient;
+@using System.Configuration;
+@{
+    Page.Title = "Register";
+    Layout = "~/Shared/_BasicLayout.cshtml";
+
+    if (Request.Form["Submit"] != null)
+    {
+        //Validates all form fields
+        Validation.RequireField("username", "Username is required");
+        Validation.RequireField("password", "Password is required");
+        Validation.RequireField("password2", "Must enter password twice");
+        Validation.RequireField("email", "Email is required");
+
+
+        var username = "";
+        var password = "";
+        var email = "";
+        if (Validation.IsValid())
+        {
+            //checks that passwords match
+            if (Request.Form["password"] == Request.Form["password2"])
+            {
+                username = Request.Form["username"];
+                password = Request.Form["password"];
+                email = Request.Form["email"];
+
+
+                string cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+                using (SqlConnection con = new SqlConnection(cstr))
+                {
+                    con.Open();
+                    //Adds a new user to the database if all validation is successful
+                    string query = string.Format("SELECT * FROM tblUser WHERE username = '{0}'", username);
+                    using (SqlCommand cmd = new SqlCommand(query, con))
+                    {
+                        SqlDataReader result = cmd.ExecuteReader();
+                        {
+                            if (result.HasRows)
+                            {
+                                Validation.AddFormError("User " + username + " already exists.");
+                            }
+                            else
+                            {
+                                query = string.Format("INSERT INTO tblUser (username, password, email, postCount, joinDate) Values('{0}', '{1}', '{2}', '{3}', '{4}')", username, password, email, 0, DateTime.Now);
+                                using (SqlCommand cmd2 = new SqlCommand(query, con))
+                                {
+                                    var result2 = cmd2.ExecuteScalar();
+                                }
+                                Response.Redirect("~/home");
+                            }
+                        }
+                    }
+
+                }
+            }
+            else
+            {
+                Validation.AddFormError("Passwords must match");
+            }
+        }
+    }
+}
+
+<div class="page_content">
+    <h2>Register</h2>
+    <!--Displays a form for inputing info for registering a new user-->
+    <form id="registerForm" class="form-inline my-2 my-lg-0" method="post" name="registerForm">
+
+        <table id="registerTable" cellpadding="10">
+            <tr>
+                <td class="error">@Html.ValidationSummary()</td>
+            </tr>
+            <tr>
+                <td class="registerData">
+                    Username:
+                </td>
+                <td class="registerData">
+                    <input type="text" id="username" name="username" />
+                </td>
+                <td class="registerData"></td>
+            </tr>
+            <tr>
+                <td class="registerData">
+                    Password:
+                </td>
+                <td>
+                    <input type="password" id="password" name="password" />
+                </td>
+                <td class="registerData"></td>
+            </tr>
+            <tr>
+                <td class="registerData">
+                    Repeat Password:
+                </td>
+                <td>
+                    <input type="password" id="password2" name="password2" />
+                </td>
+                <td class="registerData"></td>
+            </tr>
+            <tr>
+                <td class="registerData">
+                    Email:
+                </td>
+                <td class="registerData">
+                    <input type="email" id="email" name="email" />
+                </td>
+                <td class="registerData"></td>
+            </tr>
+            <tr>
+                <td class="registerData">
+                    <input type="Submit" name="Submit" value="Submit" />
+                </td>
+            </tr>
+        </table>
+        <br />
+    </form>
+</div>

@@ -1,0 +1,84 @@
+﻿@using System.Data.SqlClient;
+@using System.Configuration;
+@{
+    Page.Title = "Title goes here";
+    Layout = "~/Shared/_BasicLayout.cshtml";
+    string[] months = { "January", "February", "March",
+                        "April", "May", "June", "July",
+                        "August", "September", "October",
+                        "November", "December" };
+    var userId = new int();
+    var username = "";
+    var email = "";
+    var postCount = "";
+    var description = "";
+    var profileImage = "";
+    var joinedDate = new DateTime();
+
+    userId = Convert.ToInt32(Request.QueryString["userId"]);
+    string cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+    using (SqlConnection con = new SqlConnection(cstr))
+    {
+        con.Open();
+        //Gets the info for the user identified by the id in the query string
+        string query = string.Format("SELECT * FROM tblUser WHERE userId = '{0}'", userId);
+        using (SqlCommand cmd = new SqlCommand(query, con))
+        {
+            SqlDataReader result = cmd.ExecuteReader();
+
+
+            if (result.HasRows)
+            {
+                result.Read();
+                username = result["username"].ToString();
+                email = result["email"].ToString();
+                postCount = result["postCount"].ToString();
+                description = result["description"].ToString().Replace("<br />", "\r\n");
+                profileImage = result["profileImage"].ToString();
+                joinedDate = Convert.ToDateTime(result["joinDate"]);
+
+
+            }
+            else
+            {
+                Validation.AddFormError("No user was found for that ID.");
+            }
+        }
+        con.Close();
+    }
+
+    if (description == "")
+    {
+        description = "No description available";
+    }
+
+
+    TimeSpan dateDiff = DateTime.Now - joinedDate;
+    double hours = dateDiff.TotalHours;
+    
+}
+<!--Displays a user profile based on the data retrieved-->
+<div class="profile">
+    <h1>@username's Profile</h1>
+    <div class="userContainer"><img class="profileImage" src="~/Images/ProfileImages/@profileImage" /></div>
+    <p>Posts: @postCount</p>
+    @if (hours <= 24)
+    {
+        <p>Date joined: Today</p>
+
+
+    }
+    else if (joinedDate.Year == DateTime.Now.Year)
+    {
+        <p>Date joined: @months[joinedDate.Month - 1] @joinedDate.Day</p>
+    }
+    else
+    {
+        <p>Date joined: @joinedDate.Date.ToString("d")</p>
+    }
+    <h3>Description</h3>
+    <div class="description">
+        <textarea class="description" readonly rows="6" cols="50" style="resize:none; border:hidden; ">@description</textarea>
+    </div>
+            
+</div>

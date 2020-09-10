@@ -1,0 +1,15 @@
+﻿<!--Main layout page, puts all other layouts and content pages together to form the final displayed page-->
+<!DOCTYPE html>
+<html>
+<head>
+    @RenderPage("~/Shared/_Header.cshtml")
+    @RenderPage("~/Shared/_Navigation.cshtml")
+</head>
+
+<body>
+    @RenderBody()
+</body>
+</html>
+<footer>
+    @RenderPage("~/Shared/_Footer.cshtml")
+</footer>

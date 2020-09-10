@@ -1,0 +1,48 @@
+﻿@helper DisplayThreads(List<Thread> selectedData)
+{
+    //This helper outputs a gridview of all threads in the list it is passed, which is currently all threads in the database
+var grid = new WebGrid(source: selectedData, defaultSort: "Date", rowsPerPage: 7, sortDirectionFieldName: "ASC");
+grid.SortDirection = SortDirection.Descending;
+    <div class="threadGrid">
+        @grid.GetHtml(
+        tableStyle: "grid",
+        headerStyle: "head",
+        alternatingRowStyle: "alt",
+        columns: grid.Columns(
+
+            grid.Column(format: @<div>
+                @if (item.ImageFile != "")
+                {
+                    <img class="thumbnail" src="~/Images/ThreadImages/@item.ImageFile" />
+                }
+            </div>),
+            grid.Column(columnName: "Title", header: "Title", format: @<a href="~/thread?id=@item.Id">@item.Title</a>, style: "title"),
+            grid.Column("Size"),
+            grid.Column(columnName: "Date", header: "Age", format: @<div>
+                @{
+                    TimeSpan dateDiff = DateTime.Now - item.Date;
+                    double hours = dateDiff.TotalHours;
+                    if (hours > 48)
+                    {
+                        int days = Convert.ToInt32(Math.Floor(hours / 24));
+                        <label>@days days ago</label>
+                    }
+                    else if (hours > 24)
+                    {
+                        int days = Convert.ToInt32(Math.Floor(hours / 24));
+                        <label>@days day ago</label>
+                    }
+                    else if (hours >= 1)
+                    {
+                        <label>@Convert.ToInt32(Math.Floor(hours)) Hours Ago</label>
+                    }
+                    else
+                    {
+                        <label>@Convert.ToInt32(Math.Floor(hours * 60)) Minutes Ago</label>
+                    }
+                }
+            </div>)
+       )
+    )
+    </div>
+}

@@ -1,0 +1,178 @@
+﻿@using System.Data.SqlClient;
+@using System.Configuration;
+@{
+    Page.Title = "Title goes here";
+    Layout = "~/Shared/_BasicLayout.cshtml";
+    string[] months = { "January", "February", "March",
+                        "April", "May", "June", "July",
+                        "August", "September", "October",
+                        "November", "December" };
+    var userId = new int();
+    var username = "";
+    var email = "";
+    var postCount = "";
+    var description = "";
+    var profileImage = "";
+    var joinedDate = new DateTime();
+    if (Session["loggedIn"] != null && Session["loggedIn"].Equals(true))
+    {
+        userId = Convert.ToInt32(Session["id"]);
+        string cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+        using (SqlConnection con = new SqlConnection(cstr))
+        {
+            con.Open();
+            //Gets the user data for the id of the logged in user
+            string query = string.Format("SELECT * FROM tblUser WHERE userId = '{0}'", userId);
+            using (SqlCommand cmd = new SqlCommand(query, con))
+            {
+                SqlDataReader result = cmd.ExecuteReader();
+
+
+                if (result.HasRows)
+                {
+                    result.Read();
+                    username = result["username"].ToString();
+                    email = result["email"].ToString();
+                    postCount = result["postCount"].ToString();
+                    description = result["description"].ToString().Replace("<br />", "\r\n");
+                    profileImage = result["profileImage"].ToString();
+                    joinedDate = Convert.ToDateTime(result["joinDate"]);
+
+
+                }
+                else
+                {
+                    Validation.AddFormError("No user was found for that ID.");
+                }
+            }
+            con.Close();
+        }
+    }
+    if (description == "")
+    {
+        description = "No description available";
+    }
+
+
+    TimeSpan dateDiff = DateTime.Now - joinedDate;
+    double hours = dateDiff.TotalHours;
+    bool editDescription = false;
+    if (Request.Form["editDescriptionSubmit"] != null)
+    {
+        editDescription = true;
+    }
+    if (Request.Form["saveDescriptionSubmit"] != null || Request.Form["cancelDescriptionSubmit"] != null)
+    {
+        editDescription = false;
+    }
+
+    if (Request.Form["saveDescriptionSubmit"] != null)
+    {
+        string newDescription = Request.Form["description"];
+        newDescription.Replace("\r\n", "<br />");
+
+        string cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString + ";MultipleActiveResultSets=True";
+        using (SqlConnection con = new SqlConnection(cstr))
+        {
+            con.Open();
+            //Updates the description of the user when the description form is submitted
+            string query = string.Format("UPDATE tblUser SET description = @description WHERE userId = {0}", userId);
+
+
+
+            using (SqlCommand cmd = new SqlCommand(query, con))
+            {
+                var descriptParam = new SqlParameter("description", System.Data.SqlDbType.Text);
+                descriptParam.Value = newDescription;
+                cmd.Parameters.Add(descriptParam);
+
+                var result = cmd.ExecuteScalar();
+            }
+
+            con.Close();
+            Response.Redirect(Request.RawUrl);
+
+        }
+
+    }
+
+    if (Request.Form["uploadImage"] != null)
+    {
+        string savedFileName = null;
+        var file = Request.Files["chooseFile"];
+        string oldFile = profileImage;
+        //check file was submitted
+        if (file != null && file.ContentLength > 0)
+        {
+            string fileSeed = Guid.NewGuid().ToString("N");
+            string fname = Path.GetFileName(file.FileName);
+            string extension = Path.GetExtension(file.FileName);
+            savedFileName = fileSeed + extension;
+
+            file.SaveAs(Server.MapPath(Path.Combine("~/Images/ProfileImages/", savedFileName)));
+        }
+
+        string cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString + ";MultipleActiveResultSets=True";
+        using (SqlConnection con = new SqlConnection(cstr))
+        {
+            con.Open();
+            //Updates the profileImage of the user when the profile image form is submitted
+            string query = string.Format("UPDATE tblUser SET profileImage = '{0}' WHERE userId = {1}", savedFileName, userId);
+
+            using (SqlCommand cmd = new SqlCommand(query, con))
+            {
+                var result = cmd.ExecuteScalar();
+            }
+
+            if (savedFileName != null && oldFile != "default.jpg")
+            {
+                File.Delete(Server.MapPath(Path.Combine("~/Images/ProfileImages/", oldFile)));
+            }
+            con.Close();
+            Response.Redirect(Request.RawUrl);
+
+        }
+    }
+}
+<!--Displays a user profile based on the data retrieved-->
+<div class="profile">
+    <h1>@username's Profile</h1>
+    <div class="userContainer"><img class="profileImage" src="~/Images/ProfileImages/@profileImage" /></div>
+    <!--Form allows the user to change their profile image-->
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" accept="image/png, image/jpeg" name="chooseFile" />
+        <button type="submit" name="uploadImage">Upload</button>
+    </form>
+    <p>Posts: @postCount</p>
+    @if (hours <= 24)
+    {
+        <p>Date joined: Today</p>
+
+
+    }
+    else if (joinedDate.Year == DateTime.Now.Year)
+    {
+        <p>Date joined: @months[joinedDate.Month - 1] @joinedDate.Day</p>
+    }
+    else
+    {
+        <p>Date joined: @joinedDate.Date.ToString("d")</p>
+    }
+    <h3>Description</h3>
+    <!--Form allows the user to change their description-->
+    <form id="descriptForm" method="post">
+        @if (editDescription)
+        {
+            <textarea class="description" rows="6" cols="50" style="resize:none; width:" name="description" >@description</textarea>
+            <button id="btnSaveDescription" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="saveDescriptionSubmit">Save</button>
+            <button id="btnCancelDescription" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="cancelDescriptionSubmit">Cancel</button>
+        }
+        else
+        {
+                <textarea class="description" readonly rows="6"  cols="50" style="resize:none; border:hidden; " >@description</textarea>
+            
+            <button id="btnEditDescription" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="editDescriptionSubmit">Edit Description</button>
+
+        }
+    </form>
+</div>

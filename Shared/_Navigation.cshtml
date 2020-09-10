@@ -1,0 +1,119 @@
+﻿@using System.Data.SqlClient;
+@using System.Configuration;
+@{
+    bool loginError = false;
+    <!--Ensures that the "loggedIn" Session variable is declared-->
+    if (Session["loggedIn"] == null)
+    {
+        Session["loggedIn"] = false;
+    }
+    else if (Request.Form["loginSubmit"] != null)
+    {
+        <!--If user tries to log in-->
+
+        //Checks that username and password are not empty
+        if (Request.Form["username"] != "" && Request.Form["password"] != "")
+        {
+            var id = "";
+            var username = "";
+            var email = "";
+
+            string inputUsername = Request.Form["username"];
+            string inputPassword = Request.Form["password"];
+
+            string cstr = ConfigurationManager.ConnectionStrings["ConString"].ConnectionString;
+            using (SqlConnection con = new SqlConnection(cstr))
+            {
+                con.Open();
+                string query = string.Format("SELECT * FROM tblUser WHERE username = '{0}' AND password = '{1}'", inputUsername, inputPassword);
+                //Looks for a tblUser row that matches the entered username and password
+                using (SqlCommand cmd = new SqlCommand(query, con))
+                {
+                    SqlDataReader result = cmd.ExecuteReader();
+                    {
+                        //If a match is found, Session variables are declared
+                        //for that user, logging them in
+                        if (result.HasRows)
+                        {
+                            result.Read();
+                            id = result["userId"].ToString();
+                            username = result["username"].ToString();
+                            email = result["email"].ToString();
+
+                            Session["loggedIn"] = true;
+                            Session["username"] = username;
+                            Session["email"] = email;
+                            Session["id"] = id;
+                            Response.Redirect(Request.RawUrl);
+                        }
+                        else
+                        {
+                            loginError = true;
+                        }
+                    }
+                }
+            }
+
+
+        }
+        else
+        {
+            loginError = true;
+        }
+    }
+    //If user logs out, the user-specific session variables are removed and loggedIn is set to false
+    if (Request.Form["logoutSubmit"] != null)
+    {
+        Session.Remove("username");
+        Session.Remove("email");
+        Session.Remove("id");
+        Session["loggedIn"] = false;
+        Response.Redirect("~/home.cshtml");
+    }
+
+}
+<!--Using a navbar template from the official Bootstrap website, source: https://getbootstrap.com/docs/4.1/components/navbar/ -->
+<nav class="navbar navbar-expand-lg navbar-light">
+    <a class="navbar-brand" href="home.cshtml">
+        <img src="" id="logo" />Internet Forum
+    </a>
+
+
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        <ul class="navbar-nav mr-auto">
+            <li class="nav-item active">
+                <a class="nav-link" href="home.cshtml">Home <span class="sr-only">(current)</span></a>
+            </li>
+        </ul>
+        <!--Displays error if login fails-->
+        @if (loginError == true)
+        {
+            <span>Invalid username or password</span>
+        }
+        <!--If the user is logged in, displays a message welcoming the user-->
+        @if (Session["loggedIn"].Equals(true))
+        {
+            <span style="padding:2px;">Welcome @Session["username"]!</span>
+
+            <!--Also displays a logout and edit-profile button if logged in-->
+            <form id="logout" method="post" class="form-inline my-2 my-lg-0">
+                <a id="editProfile" style="padding:2px;" href="~/editProfile.cshtml">Edit/View Profile</a>
+                <button id="btnlogout" style="padding:2px;" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="logoutSubmit">Logout</button>
+            </form>
+        }
+        else
+        {
+            <!--If user isn't logged in, displays a link for registration and form inputs for logging in-->
+            <a id="register" href="~/registration.cshtml">Register</a>
+            <form id="login" method="post" class="form-inline my-2 my-lg-0">
+                <input class="form-control mr-sm-2"  style="margin:2px;"type="text" placeholder="Username" aria-label="Username" name="username">
+                <input class="form-control mr-sm-2"  style="margin:2px;" type="password" placeholder="Password" aria-label="Password" name="password">
+                <button id="btnlogin" style="margin:2px;" class="btn btn-outline-success my-2 my-sm-0" type="submit" name="loginSubmit">Login</button>
+            </form>
+        }
+    </div>
+</nav>
